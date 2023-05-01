@@ -1,0 +1,950 @@
+```{r packages}
+
+library(ggplot2)
+library(reshape2)
+
+```
+
+
+
+```{r functions}
+
+#Calculate Euclidean mate value
+eucmvcalc<-function(preferences,traits){
+  
+  #Rename preference and traits to be the same
+  #This is sometimes necessary for calculating distance
+  names(preferences)<-1:length(preferences)
+  names(traits)<-1:length(traits)
+  
+  #Calculate the Euclidean distance between preferences and traits
+  distance<-dist(rbind(preferences,traits))
+  
+  #Rescale to a 0-10 scale
+  distance<-10*(-1*distance+sqrt(10^2*length(preferences)))/sqrt(10^2*length(preferences))
+  
+  return(distance)
+}
+
+```
+
+
+
+```{r load data}
+
+#####Load wave1######
+wave1Full<-read.csv("Human Data/Raw Data/CAREER+3_January+19,+2023_09.27.csv")
+wave2Full<-read.csv("Human Data/Raw Data/CAREER+3+Follow-Up_January+19,+2023_09.33.csv")
+
+#Remove participants whom Qualtrics did not define as "good completes"
+wave1Full<-wave1Full[wave1Full$gc==1,]
+wave2Full<-wave2Full[wave2Full$gc==1,]
+
+#Create copies (will leave the originals intact)
+wave1<-wave1Full
+wave2<-wave2Full
+
+```
+
+
+
+```{r rearranging and labeling}
+
+#Remove unnecessary rows
+wave2<-wave2[-(1:6),]
+
+#Remove people with an unknown relationship status
+wave2<-wave2[!is.na(wave2$A_relstat),]
+
+
+#Arrange both waves PID
+wave1<-wave1[order(wave1$PID),]
+wave2<-wave2[order(wave2$PID),]
+
+
+#Assign a couple ID to all couples in wave 1
+wave1$CIN<-1:nrow(wave1)
+
+#Assign the same couple IDs in wave 2
+wave2$CIN<-wave1$CIN[match(wave2$PID,wave1$PID)]
+
+#Some participants were contacted twice, usually because their partners weren't available the first time around
+contact2<-wave2$CIN[duplicated(wave2$CIN)]
+
+#Remove the first entry from participants who were contacted twice
+wave2<-wave2[!(wave2$CIN %in% contact2 & duplicated(wave2$CIN)==F),]
+
+
+#Split the dataframe into A and B wave1
+wave1a<-wave1[,c(21:25,28:225,427,440)]
+wave1b<-wave1[,-c(1:20,24:25,28:227,426,428:439)]
+wave1b<-wave1b[,c(1:136,164:169,137:163,170:205)]
+
+
+#Rename the columns for wave 1
+colnames(wave1a)<-c("relstat", "relstatText", "relLength", "sex","sexText", "age", "sexOrient", "sexOrientText","selfRaceAAPI",
+                   "selfRaceBlack", "selfRaceLatinx", "selfRaceNAAI", "selfRaceMENA", "selfRaceWhite",
+                   "selfRaceNA","selfReligion","selfReligionText","selfHeightFt", "selfHeightIn", 
+                   "selfSmoke", "selfPoliparty","idealAffectionate1", "idealAffectionate2", "idealAmbition1",
+                   "idealAmbition2", "idealArtistic1", "idealArtistic2", "idealDisposition1", 
+                   "idealDisposition2", "idealFamily1","idealFamily2","idealHealth1", 
+                   "idealHealth2", "idealHumor1","idealHumor2",
+                   "idealIntelligent1", "idealIntelligent2", "idealKind1", "idealKind2", 
+                   "idealParenting1", "idealParenting2", "idealPhysatt1", "idealPhysatt2", 
+                   "idealReligious1", "idealReligious2", "idealResources1", "idealResources2", 
+                   "idealSexy1", "idealSexy2", "idealStatus1", "idealStatus2", "idealAge",
+                   "selfAffectionate1", "selfAffectionate2", "selfAmbition1", "selfAmbition2", 
+                   "selfArtistic1", "selfArtistic2", "selfDisposition1", 
+                   "selfDisposition2", "selfFamily1","selfFamily2","selfHealth1", 
+                   "selfHealth2", "selfHumor1","selfHumor2",
+                   "selfIntelligent1", "selfIntelligent2", "selfKind1", "selfKind2", 
+                   "selfParenting1", "selfParenting2", "selfPhysatt1", "selfPhysatt2", 
+                   "selfReligious1", "selfReligious2", "selfResources1", "selfResources2", 
+                   "selfSexy1", "selfSexy2", "selfStatus1", "selfStatus2","mateAffectionate1",
+                   "mateAffectionate2", "mateAmbition1", "mateAmbition2", 
+                   "mateArtistic1", "mateArtistic2", "mateDisposition1", 
+                   "mateDisposition2", "mateFamily1","mateFamily2","mateHealth1", 
+                   "mateHealth2", "mateHumor1","mateHumor2",
+                   "mateIntelligent1", "mateIntelligent2", "mateKind1", "mateKind2", 
+                   "mateParenting1", "mateParenting2", "matePhysatt1", "matePhysatt2", 
+                   "mateReligious1", "mateReligious2", "mateResources1", "mateResources2", 
+                   "mateSexy1", "mateSexy2", "mateStatus1", "mateStatus2", "attcheck", "qmi1", 
+                   "qmi2", "qmi3", "qmi4", "qmi5", "qmiHappy",
+                   "jeal1","jeal2","jeal3","jeal4","jeal5","kissPbelief","kissRbelief",
+                   "guardP1","guardP2","guardP3","guardP4","guardP5","guardR1",
+                   "guardR2","guardR3","guardR4","guardR5",
+                   "dqEthnicity1","dqEthnicity2","dqEthnicity3",
+                   "dqEthnicity4","dqEthnicity5","dqEthnicity6",
+                   "dqReligion1","dqReligion2","dqReligion3","dqReligion4",
+                   "dqReligion5","dqReligion6","dqReligion7","dqReligion8",
+                   "dqReligion9","dqReligion10","dqReligion11", "dqReligion12",
+                   "dqHeight1", "dqHeight2","dqHeight3","dqHeight4","dqHeight5","dqHeight6",
+                   "dqHeight7", "dqSmoke1","dqSmoke2",
+                   "dqSmoke3","dqPoliparty1", "dqPoliparty2", "dqPoliparty3","dqPoliparty4",
+                   "dqPoliparty5","prqcSat1", "prqcSat2", "prqcSat3", "prqcComm1",
+                   "prqcComm2", "prqcComm3","prqcInt1", "prqcInt2", "prqcInt3",
+                   "prqcTrust1", "prqcTrust2", "prqcTrust3",
+                   "prqcPass1", "prqcPass2", "prqcPass3", "prqcLove1",
+                   "prqcLove2", "prqcLove3", "impAffection",
+                   "impAmbition", "impArtistic", "impDisposition", 
+                   "impFamily", "impHealth", "impHumor","impIntelligent",
+                   "impKind", "impParenting", "impPhysatt",
+                   "impReligious", "impResources","impSexy", "impStatus", 
+                   "impAge","QID","CIN")
+
+
+colnames(wave1b)<-c("relstat", "relstatText", "relLength", "sex","sexText", "age", "sexOrient", "sexOrientText","selfRaceAAPI",
+                    "selfRaceBlack", "selfRaceLatinx", "selfRaceNAAI", "selfRaceMENA", "selfRaceWhite",
+                    "selfRaceNA","selfReligion","selfReligionText","selfHeightFt", "selfHeightIn", 
+                    "selfSmoke", "selfPoliparty","idealAffectionate1", "idealAffectionate2", "idealAmbition1",
+                    "idealAmbition2", "idealArtistic1", "idealArtistic2", "idealDisposition1", 
+                    "idealDisposition2", "idealFamily1","idealFamily2","idealHealth1", 
+                    "idealHealth2", "idealHumor1","idealHumor2",
+                    "idealIntelligent1", "idealIntelligent2", "idealKind1", "idealKind2", 
+                    "idealParenting1", "idealParenting2", "idealPhysatt1", "idealPhysatt2", 
+                    "idealReligious1", "idealReligious2", "idealResources1", "idealResources2", 
+                    "idealSexy1", "idealSexy2", "idealStatus1", "idealStatus2", "idealAge",
+                    "selfAffectionate1", "selfAffectionate2", "selfAmbition1", "selfAmbition2", 
+                    "selfArtistic1", "selfArtistic2", "selfDisposition1", 
+                    "selfDisposition2", "selfFamily1","selfFamily2","selfHealth1", 
+                    "selfHealth2", "selfHumor1","selfHumor2",
+                    "selfIntelligent1", "selfIntelligent2", "selfKind1", "selfKind2", 
+                    "selfParenting1", "selfParenting2", "selfPhysatt1", "selfPhysatt2", 
+                    "selfReligious1", "selfReligious2", "selfResources1", "selfResources2", 
+                    "selfSexy1", "selfSexy2", "selfStatus1", "selfStatus2","mateAffectionate1",
+                    "mateAffectionate2", "mateAmbition1", "mateAmbition2", 
+                    "mateArtistic1", "mateArtistic2", "mateDisposition1", 
+                    "mateDisposition2", "mateFamily1","mateFamily2","mateHealth1", 
+                    "mateHealth2", "mateHumor1","mateHumor2",
+                    "mateIntelligent1", "mateIntelligent2", "mateKind1", "mateKind2", 
+                    "mateParenting1", "mateParenting2", "matePhysatt1", "matePhysatt2", 
+                    "mateReligious1", "mateReligious2", "mateResources1", "mateResources2", 
+                    "mateSexy1", "mateSexy2", "mateStatus1", "mateStatus2", "attcheck", "qmi1", 
+                    "qmi2", "qmi3", "qmi4", "qmi5", "qmiHappy",
+                    "jeal1","jeal2","jeal3","jeal4","jeal5","kissPbelief","kissRbelief",
+                    "guardP1","guardP2","guardP3","guardP4","guardP5","guardR1",
+                    "guardR2","guardR3","guardR4","guardR5",
+                    "dqEthnicity1","dqEthnicity2","dqEthnicity3",
+                    "dqEthnicity4","dqEthnicity5","dqEthnicity6",
+                    "dqReligion1","dqReligion2","dqReligion3","dqReligion4",
+                    "dqReligion5","dqReligion6","dqReligion7","dqReligion8",
+                    "dqReligion9","dqReligion10","dqReligion11", "dqReligion12",
+                    "dqHeight1", "dqHeight2","dqHeight3","dqHeight4","dqHeight5","dqHeight6",
+                    "dqHeight7", "dqSmoke1","dqSmoke2",
+                    "dqSmoke3","dqPoliparty1", "dqPoliparty2", "dqPoliparty3","dqPoliparty4",
+                    "dqPoliparty5","prqcSat1", "prqcSat2", "prqcSat3", "prqcComm1",
+                    "prqcComm2", "prqcComm3","prqcInt1", "prqcInt2", "prqcInt3",
+                    "prqcTrust1", "prqcTrust2", "prqcTrust3",
+                    "prqcPass1", "prqcPass2", "prqcPass3", "prqcLove1",
+                    "prqcLove2", "prqcLove3", "impAffection",
+                    "impAmbition", "impArtistic", "impDisposition", 
+                    "impFamily", "impHealth", "impHumor","impIntelligent",
+                    "impKind", "impParenting", "impPhysatt",
+                    "impReligious", "impResources","impSexy", "impStatus", 
+                    "impAge","QID","CIN")
+
+
+#Split the dataframe into A and B wave2
+wave2a<-wave2[,c(18:19,24:217,220:307,508:513,521,532)]
+wave2b<-wave2[,-c(1:17,20:23,60:120,164:212,216:217,220:309,508:513,520,522:531)]
+
+#Rearrange wave 2 to match each other and wave 1
+wave2a<-wave2a[,c(192:212,39:99,213:266,143:175,267:284,176:191,1:2,285:290,3:38,100:142,291:292)]
+wave2b<-wave2b[,c(82:217,245:250,218:244,251:284,1:2,285:290,3:81,291:292)]
+
+
+#Rename the columns for wave 2
+colnames(wave2a)<-c("relstat", "relstatText", "relLength", "sex","sexText", "age", "sexOrient", "sexOrientText","selfRaceAAPI",
+                    "selfRaceBlack", "selfRaceLatinx", "selfRaceNAAI", "selfRaceMENA", "selfRaceWhite",
+                    "selfRaceNA","selfReligion","selfReligionText","selfHeightFt", "selfHeightIn", 
+                    "selfSmoke", "selfPoliparty","idealAffectionate1", "idealAffectionate2", "idealAmbition1",
+                    "idealAmbition2", "idealArtistic1", "idealArtistic2", "idealDisposition1", 
+                    "idealDisposition2", "idealFamily1","idealFamily2","idealHealth1", 
+                    "idealHealth2", "idealHumor1","idealHumor2",
+                    "idealIntelligent1", "idealIntelligent2", "idealKind1", "idealKind2", 
+                    "idealParenting1", "idealParenting2", "idealPhysatt1", "idealPhysatt2", 
+                    "idealReligious1", "idealReligious2", "idealResources1", "idealResources2", 
+                    "idealSexy1", "idealSexy2", "idealStatus1", "idealStatus2", "idealAge",
+                    "selfAffectionate1", "selfAffectionate2", "selfAmbition1", "selfAmbition2", 
+                    "selfArtistic1", "selfArtistic2", "selfDisposition1", 
+                    "selfDisposition2", "selfFamily1","selfFamily2","selfHealth1", 
+                    "selfHealth2", "selfHumor1","selfHumor2",
+                    "selfIntelligent1", "selfIntelligent2", "selfKind1", "selfKind2", 
+                    "selfParenting1", "selfParenting2", "selfPhysatt1", "selfPhysatt2", 
+                    "selfReligious1", "selfReligious2", "selfResources1", "selfResources2", 
+                    "selfSexy1", "selfSexy2", "selfStatus1", "selfStatus2","mateAffectionate1",
+                    "mateAffectionate2", "mateAmbition1", "mateAmbition2", 
+                    "mateArtistic1", "mateArtistic2", "mateDisposition1", 
+                    "mateDisposition2", "mateFamily1","mateFamily2","mateHealth1", 
+                    "mateHealth2", "mateHumor1","mateHumor2",
+                    "mateIntelligent1", "mateIntelligent2", "mateKind1", "mateKind2", 
+                    "mateParenting1", "mateParenting2", "matePhysatt1", "matePhysatt2", 
+                    "mateReligious1", "mateReligious2", "mateResources1", "mateResources2", 
+                    "mateSexy1", "mateSexy2", "mateStatus1", "mateStatus2", "attcheck", "qmi1", 
+                    "qmi2", "qmi3", "qmi4", "qmi5", "qmiHappy",
+                    "jeal1","jeal2","jeal3","jeal4","jeal5","kissPbelief","kissRbelief",
+                    "guardP1","guardP2","guardP3","guardP4","guardP5","guardR1",
+                    "guardR2","guardR3","guardR4","guardR5",
+                    "dqEthnicity1","dqEthnicity2","dqEthnicity3",
+                    "dqEthnicity4","dqEthnicity5","dqEthnicity6",
+                    "dqReligion1","dqReligion2","dqReligion3","dqReligion4",
+                    "dqReligion5","dqReligion6","dqReligion7","dqReligion8",
+                    "dqReligion9","dqReligion10","dqReligion11", "dqReligion12",
+                    "dqHeight1", "dqHeight2","dqHeight3","dqHeight4","dqHeight5","dqHeight6",
+                    "dqHeight7", "dqSmoke1","dqSmoke2",
+                    "dqSmoke3","dqPoliparty1", "dqPoliparty2", "dqPoliparty3","dqPoliparty4",
+                    "dqPoliparty5","prqcSat1", "prqcSat2", "prqcSat3", "prqcComm1",
+                    "prqcComm2", "prqcComm3","prqcInt1", "prqcInt2", "prqcInt3",
+                    "prqcTrust1", "prqcTrust2", "prqcTrust3",
+                    "prqcPass1", "prqcPass2", "prqcPass3", "prqcLove1",
+                    "prqcLove2", "prqcLove3", "impAffection",
+                    "impAmbition", "impArtistic", "impDisposition", 
+                    "impFamily", "impHealth", "impHumor","impIntelligent",
+                    "impKind", "impParenting", "impPhysatt",
+                    "impReligious", "impResources","impSexy", "impStatus", 
+                    "impAge","relstat2","relsame","selfSatChange","selfJealChange",
+                    "mateSatChange","mateJealChange","selfInfidelity","mateInfidelity",
+                    paste0("breakup",c("Infidelity","Death","Abuse","NewPartner",
+                                        "Family","SexNeglect","Finance","Incompatible",
+                                        "Change","Misperception","Other","Text")),
+                    "breakupOpen","breakupTime","breakupInit","breakupInitText",
+                    "breakupRestart","newPartner","breakupSex","breakupSexText",
+                    "breakupAge","breakupSexorient","breakupSexorientText",paste0("breakupRace",1:7),
+                    "breakupReligion","breakupReligionText",
+                    "breakupHeightFt","breakupHeightIn","breakupSmoke","breakupPoliparty",
+                    "priorAffectionate1", "priorAffectionate2", "priorAmbition1", "priorAmbition2", 
+                    "priorArtistic1", "priorArtistic2", "priorDisposition1", 
+                    "priorDisposition2", "priorFamily1","priorFamily2","priorHealth1", 
+                    "priorHealth2", "priorHumor1","priorHumor2",
+                    "priorIntelligent1", "priorIntelligent2", "priorKind1", "priorKind2", 
+                    "priorParenting1", "priorParenting2", "priorPhysatt1", "priorPhysatt2", 
+                    "priorReligious1", "priorReligious2", "priorResources1", "priorResources2", 
+                    "priorSexy1", "priorSexy2", "priorStatus1", "priorStatus2",
+                    paste0("priorRace",1:7),"priorPoliparty","priorReligion","priorReligionText",
+                    "priorHeightFt","priorHeightIn","priorSmoke","QID","CIN")
+
+
+colnames(wave2b)<-c("relstat", "relstatText", "relLength", "sex","sexText", "age", "sexOrient", "sexOrientText","selfRaceAAPI",
+                    "selfRaceBlack", "selfRaceLatinx", "selfRaceNAAI", "selfRaceMENA", "selfRaceWhite",
+                    "selfRaceNA","selfReligion","selfReligionText","selfHeightFt", "selfHeightIn", 
+                    "selfSmoke", "selfPoliparty","idealAffectionate1", "idealAffectionate2", "idealAmbition1",
+                    "idealAmbition2", "idealArtistic1", "idealArtistic2", "idealDisposition1", 
+                    "idealDisposition2", "idealFamily1","idealFamily2","idealHealth1", 
+                    "idealHealth2", "idealHumor1","idealHumor2",
+                    "idealIntelligent1", "idealIntelligent2", "idealKind1", "idealKind2", 
+                    "idealParenting1", "idealParenting2", "idealPhysatt1", "idealPhysatt2", 
+                    "idealReligious1", "idealReligious2", "idealResources1", "idealResources2", 
+                    "idealSexy1", "idealSexy2", "idealStatus1", "idealStatus2", "idealAge",
+                    "selfAffectionate1", "selfAffectionate2", "selfAmbition1", "selfAmbition2", 
+                    "selfArtistic1", "selfArtistic2", "selfDisposition1", 
+                    "selfDisposition2", "selfFamily1","selfFamily2","selfHealth1", 
+                    "selfHealth2", "selfHumor1","selfHumor2",
+                    "selfIntelligent1", "selfIntelligent2", "selfKind1", "selfKind2", 
+                    "selfParenting1", "selfParenting2", "selfPhysatt1", "selfPhysatt2", 
+                    "selfReligious1", "selfReligious2", "selfResources1", "selfResources2", 
+                    "selfSexy1", "selfSexy2", "selfStatus1", "selfStatus2","mateAffectionate1",
+                    "mateAffectionate2", "mateAmbition1", "mateAmbition2", 
+                    "mateArtistic1", "mateArtistic2", "mateDisposition1", 
+                    "mateDisposition2", "mateFamily1","mateFamily2","mateHealth1", 
+                    "mateHealth2", "mateHumor1","mateHumor2",
+                    "mateIntelligent1", "mateIntelligent2", "mateKind1", "mateKind2", 
+                    "mateParenting1", "mateParenting2", "matePhysatt1", "matePhysatt2", 
+                    "mateReligious1", "mateReligious2", "mateResources1", "mateResources2", 
+                    "mateSexy1", "mateSexy2", "mateStatus1", "mateStatus2", "attcheck", "qmi1", 
+                    "qmi2", "qmi3", "qmi4", "qmi5", "qmiHappy",
+                    "jeal1","jeal2","jeal3","jeal4","jeal5","kissPbelief","kissRbelief",
+                    "guardP1","guardP2","guardP3","guardP4","guardP5","guardR1",
+                    "guardR2","guardR3","guardR4","guardR5",
+                    "dqEthnicity1","dqEthnicity2","dqEthnicity3",
+                    "dqEthnicity4","dqEthnicity5","dqEthnicity6",
+                    "dqReligion1","dqReligion2","dqReligion3","dqReligion4",
+                    "dqReligion5","dqReligion6","dqReligion7","dqReligion8",
+                    "dqReligion9","dqReligion10","dqReligion11", "dqReligion12",
+                    "dqHeight1", "dqHeight2","dqHeight3","dqHeight4","dqHeight5","dqHeight6",
+                    "dqHeight7", "dqSmoke1","dqSmoke2",
+                    "dqSmoke3","dqPoliparty1", "dqPoliparty2", "dqPoliparty3","dqPoliparty4",
+                    "dqPoliparty5","prqcSat1", "prqcSat2", "prqcSat3", "prqcComm1",
+                    "prqcComm2", "prqcComm3","prqcInt1", "prqcInt2", "prqcInt3",
+                    "prqcTrust1", "prqcTrust2", "prqcTrust3",
+                    "prqcPass1", "prqcPass2", "prqcPass3", "prqcLove1",
+                    "prqcLove2", "prqcLove3", "impAffection",
+                    "impAmbition", "impArtistic", "impDisposition", 
+                    "impFamily", "impHealth", "impHumor","impIntelligent",
+                    "impKind", "impParenting", "impPhysatt",
+                    "impReligious", "impResources","impSexy", "impStatus", 
+                    "impAge","relstat2","relsame","selfSatChange","selfJealChange",
+                    "mateSatChange","mateJealChange","selfInfidelity","mateInfidelity",
+                    paste0("breakup",c("Infidelity","Death","Abuse","NewPartner",
+                                       "Family","SexNeglect","Finance","Incompatible",
+                                       "Change","Misperception","Other","Text")),
+                    "breakupOpen","breakupTime","breakupInit","breakupInitText",
+                    "breakupRestart","newPartner","breakupSex","breakupSexText",
+                    "breakupAge","breakupSexorient","breakupSexorientText",paste0("breakupRace",1:7),
+                    "breakupReligion","breakupReligionText",
+                    "breakupHeightFt","breakupHeightIn","breakupSmoke","breakupPoliparty",
+                    "priorAffectionate1", "priorAffectionate2", "priorAmbition1", "priorAmbition2", 
+                    "priorArtistic1", "priorArtistic2", "priorDisposition1", 
+                    "priorDisposition2", "priorFamily1","priorFamily2","priorHealth1", 
+                    "priorHealth2", "priorHumor1","priorHumor2",
+                    "priorIntelligent1", "priorIntelligent2", "priorKind1", "priorKind2", 
+                    "priorParenting1", "priorParenting2", "priorPhysatt1", "priorPhysatt2", 
+                    "priorReligious1", "priorReligious2", "priorResources1", "priorResources2", 
+                    "priorSexy1", "priorSexy2", "priorStatus1", "priorStatus2",
+                    paste0("priorRace",1:7),"priorPoliparty","priorReligion","priorReligionText",
+                    "priorHeightFt","priorHeightIn","priorSmoke","QID","CIN")
+
+#Insert breakup demographics into regular demographics
+#These had to be asked separately because of the survey flow but it's silly to keep them separate
+#Partner B can't have breakup values because if Ps broke up partner B wasn't surveyed
+for(x in 4:21){
+  wave2a[,x]<-ifelse(is.na(wave2a[,x]),I(wave2a[,x+226]),I(wave2a[,x]))
+}
+
+#Remove breakup demographics as they're no longer needed
+wave2a<-wave2a[-c(230:247)]
+wave2b<-wave2b[-c(230:247)]
+
+#Label which partner was which
+wave1a$abPartner<-"A"
+wave1b$abPartner<-"B"
+
+wave2a$abPartner<-"A"
+wave2b$abPartner<-"B"
+
+
+#Assign all the broken up people the sex of Partner A/B from wave 1 (just makes it easier to give them a PIN)
+wave2a$sex[wave2a$relstat2==0]<-wave1a$sex[match(wave2a$QID[wave2a$relstat2==0],wave1a$QID)]
+wave2b$sex[wave2b$relstat2==0]<-wave1b$sex[match(wave2b$QID[wave2b$relstat2==0],wave1b$QID)]
+
+#Put the waves back together
+wave1<-rbind(wave1a,wave1b)
+wave2<-rbind(wave2a,wave2b)
+
+#Create blank columns to store Wave 2 variables that don't exist in Wave 1
+wave1<-cbind(wave1,matrix(NA,nrow(wave1),ncol(wave2)-ncol(wave1)))
+colnames(wave1)[207:275]<-colnames(wave2)[204:272]
+wave1<-wave1[,c(1:203,207:275,204:206)]
+
+#Sort by couple ID
+wave1<-wave1[order(wave1$CIN,wave1$abPartner),]
+wave2<-wave2[order(wave2$CIN,wave2$abPartner),]
+
+#Assign each participant a unique ID number across waves
+#This assumes that partner A is the same across both waves
+#This appears to be the case given that A is the partner Qualtrics actually contacted
+PIN<-data.frame("ID"=paste0(wave1$QID,wave1$abPartner,wave1$sex))
+PIN$PIN<-1:nrow(PIN)
+
+wave1$PIN<-PIN$PIN[match(paste0(wave1$QID,wave1$abPartner,wave1$sex),PIN$ID)]
+wave2$PIN<-PIN$PIN[match(paste0(wave2$QID,wave2$abPartner,wave2$sex),PIN$ID)]
+wave2<-wave2[!(wave2$CIN %in% wave2$CIN[is.na(wave2$PIN)]),]
+
+```
+
+
+
+```{r composites}
+
+#Create a dataframe of just ratings
+w1Ratings<-wave1[,c(22:51,53:82,83:112,230:259)]
+w2Ratings<-wave2[,c(22:51,53:82,83:112,230:259)]
+
+#Subtract 1 from all ratings as the scale is wrong
+w1Ratings<-w1Ratings-1
+w2Ratings<-w2Ratings-1
+
+#Compute composite ratings
+w1Comps<-sapply(seq(1,120,2),function(x) rowMeans(w1Ratings[,x:(x+1)]))
+w2Comps<-sapply(seq(1,120,2),function(x) rowMeans(w2Ratings[,x:(x+1)]))
+
+#Generate composite names
+compNames<-colnames(w1Ratings)[seq(1,120,2)]
+compNames<-gsub("1","",compNames)
+
+colnames(w1Comps)<-compNames
+colnames(w2Comps)<-compNames
+
+#Cbind in composite ratings
+wave1<-cbind(wave1,w1Comps)
+wave2<-cbind(wave2,w2Comps)
+
+w1CompRateCors<-sapply(seq(1,90,2),function(x) cor(w1Ratings[,x],w1Ratings[,(x+1)],use="pairwise.complete.obs"))
+w2CompRateCors<-sapply(seq(1,90,2),function(x) cor(w2Ratings[,x],w2Ratings[,(x+1)],use="pairwise.complete.obs"))
+
+
+
+###Compute Self-Other Rating Composites###
+
+#Change rating names to reflect that they are self ratings
+colnames(wave1)[292:321]<-paste0(colnames(wave1[,292:321]),"SR")
+colnames(wave2)[292:321]<-paste0(colnames(wave2[,292:321]),"SR")
+
+#Pull out ratings for partners A and B separately
+w1amrData<-wave1[wave1$abPartner=="A",292:321]
+w1bmrData<-wave1[wave1$abPartner=="B",292:321]
+
+w2amrData<-wave2[wave2$abPartner=="A",292:321]
+w2bmrData<-wave2[wave2$abPartner=="B",292:321]
+
+#Relabel these to show that they reflect mate ratings
+mrNames<-colnames(w1amrData)
+mrNames<-gsub("SR","MR",mrNames)
+
+mrNames<-c(mrNames[16:30],mrNames[1:15])
+
+colnames(w1amrData)<-mrNames
+colnames(w1bmrData)<-mrNames
+
+colnames(w2amrData)<-mrNames
+colnames(w2bmrData)<-mrNames
+
+#Separate A and B participants
+wave1a<-subset(wave1,wave1$abPartner=="A")
+wave1b<-subset(wave1,wave1$abPartner=="B")
+
+wave2a<-subset(wave2,wave2$abPartner=="A")
+wave2b<-subset(wave2,wave2$abPartner=="B")
+
+#Bind in the mate ratings
+wave1a<-cbind(wave1a,w1bmrData)
+wave1b<-cbind(wave1b,w1amrData)
+
+wave2a<-cbind(wave2a,w2bmrData)
+wave2b<-cbind(wave2b,w2amrData)
+
+
+#Also get partner age in now
+wave1a$mateAge<-wave1b$age
+wave1b$mateAge<-wave1a$age
+
+wave2a$mateAge<-wave2b$age
+wave2b$mateAge<-wave2a$age
+
+#Compute self-other agreements
+w1aAgreeCor<-sapply(1:15,function(x) cor(w1amrData[,x],w1bmrData[,x+15],use="pairwise.complete.obs"))
+w1bAgreeCor<-sapply(1:15,function(x) cor(w1bmrData[,x],w1amrData[,x+15],use="pairwise.complete.obs"))
+
+w2aAgreeCor<-sapply(1:15,function(x) cor(w2amrData[,x],w2bmrData[,x+15],use="pairwise.complete.obs"))
+w2bAgreeCor<-sapply(1:15,function(x) cor(w2bmrData[,x],w2amrData[,x+15],use="pairwise.complete.obs"))
+
+
+#Put the waves back together
+wave1<-rbind(wave1a,wave1b)
+wave2<-rbind(wave2a,wave2b)
+
+#Re-order waves
+wave1<-wave1[order(wave1$CIN,wave1$sex,wave1$abPartner),]
+wave2<-wave2[order(wave2$CIN,wave2$sex,wave2$abPartner),]
+
+#Separate out ratings of self and ratings of mate
+w1selfRatings<-wave1[,c(292:306,352:366)]
+w1mateRatings<-wave1[,c(307:321,337:351)]
+
+w2selfRatings<-wave2[,c(292:306,352:366)]
+w2mateRatings<-wave2[,c(307:321,337:351)]
+
+#Compute self-other composites
+w1mateComps<-sapply(1:15,function(x) rowMeans(w1mateRatings[,c(x,(x+15))]))
+w1selfComps<-sapply(1:15,function(x) rowMeans(w1selfRatings[,c(x,(x+15))]))
+
+w2mateComps<-sapply(1:15,function(x) rowMeans(w2mateRatings[,c(x,(x+15))]))
+w2selfComps<-sapply(1:15,function(x) rowMeans(w2selfRatings[,c(x,(x+15))]))
+
+#Create column name vectors
+mateNames<-colnames(wave1[,307:321])
+selfNames<-colnames(wave1[,292:306])
+
+selfNames<-gsub("SR","Comp",selfNames)
+mateNames<-gsub("SR","Comp",mateNames)
+
+#Rename the columns
+colnames(w1mateComps)<-mateNames
+colnames(w1selfComps)<-selfNames
+
+colnames(w2mateComps)<-mateNames
+colnames(w2selfComps)<-selfNames
+
+#Put the wave1 back together
+wave1<-cbind(wave1,w1selfComps,w1mateComps)
+wave2<-cbind(wave2,w2selfComps,w2mateComps)
+
+#Create a vector for Likert-type age
+wave1$selfAge<-wave1$age
+wave2$selfAge<-wave2$age
+
+
+#Recode age to be comparable to ideal age
+wave1$selfAge<-ifelse(wave1$age>=75,10,ifelse(wave1$age>69,9,ifelse(wave1$age>63,8,ifelse(wave1$age>57,7,ifelse(wave1$age>51,6,ifelse(wave1$age>45,5,ifelse(wave1$age>39,4,ifelse(wave1$age>33,3,ifelse(wave1$age>27,2,ifelse(wave1$age>21,1,0))))))))))
+wave1$mateAge<-ifelse(wave1$mateAge>=75,10,ifelse(wave1$mateAge>69,9,ifelse(wave1$mateAge>63,8,ifelse(wave1$mateAge>57,7,ifelse(wave1$mateAge>51,6,ifelse(wave1$mateAge>45,5,ifelse(wave1$mateAge>39,4,ifelse(wave1$mateAge>33,3,ifelse(wave1$mateAge>27,2,ifelse(wave1$mateAge>21,1,0))))))))))
+
+wave2$selfAge<-ifelse(wave2$age>=75,10,ifelse(wave2$age>69,9,ifelse(wave2$age>63,8,ifelse(wave2$age>57,7,ifelse(wave2$age>51,6,ifelse(wave2$age>45,5,ifelse(wave2$age>39,4,ifelse(wave2$age>33,3,ifelse(wave2$age>27,2,ifelse(wave2$age>21,1,0))))))))))
+wave2$mateAge<-ifelse(wave2$mateAge>=75,10,ifelse(wave2$mateAge>69,9,ifelse(wave2$mateAge>63,8,ifelse(wave2$mateAge>57,7,ifelse(wave2$mateAge>51,6,ifelse(wave2$mateAge>45,5,ifelse(wave2$mateAge>39,4,ifelse(wave2$mateAge>33,3,ifelse(wave2$mateAge>27,2,ifelse(wave2$mateAge>21,1,0))))))))))
+
+```
+
+
+
+```{r mate value variables}
+
+Pregenerate vectors for all variables
+#Makes merging wave1 back together easier later
+wave1$prefmatchSR<-NA
+wave1$selfmvSR<-NA
+wave1$matemvSR<-NA
+wave1$mvdppSR<-NA
+wave1$mvdpsSR<-NA
+
+wave1$prefmatchMR<-NA
+wave1$selfmvMR<-NA
+wave1$matemvMR<-NA
+wave1$mvdppMR<-NA
+wave1$mvdpsMR<-NA
+
+wave1$prefmatchComp<-NA
+wave1$selfmvComp<-NA
+wave1$matemvComp<-NA
+wave1$mvdppComp<-NA
+wave1$mvdpsComp<-NA
+
+wave1$prefmatchPrior<-NA
+wave1$matemvPrior<-NA
+wave1$mvdpsPrior<-NA
+
+wave1$idealmv<-NA
+
+
+wave2$prefmatchSR<-NA
+wave2$selfmvSR<-NA
+wave2$matemvSR<-NA
+wave2$mvdppSR<-NA
+wave2$mvdpsSR<-NA
+
+wave2$prefmatchMR<-NA
+wave2$selfmvMR<-NA
+wave2$matemvMR<-NA
+wave2$mvdppMR<-NA
+wave2$mvdpsMR<-NA
+
+wave2$prefmatchComp<-NA
+wave2$selfmvComp<-NA
+wave2$matemvComp<-NA
+wave2$mvdppComp<-NA
+wave2$mvdpsComp<-NA
+
+wave2$prefmatchPrior<-NA
+wave2$matemvPrior<-NA
+wave2$mvdpsPrior<-NA
+
+wave2$idealmv<-NA
+
+
+
+#Remove non-heterosexual participants from wave 1 for these calculations
+w1nhet<-wave1[sapply(wave1$CIN,function(x) sum(duplicated(wave1$sex[wave1$CIN==x])))>0,]
+w1nhet<-rbind(w1nhet,wave1[wave1$CIN %in% wave1$CIN[wave1$sex>1],])
+
+#Identify putative same-sex couples in wave 2
+w2nhet<-sapply(wave2$CIN,function(x) sum(duplicated(wave2$sex[wave2$CIN==x])))>0
+
+#Remove those whose sexes are just NAs
+w2nhet2<-w2nhet*(sapply(wave2$CIN,function(x) sum(is.na(wave2$sex[wave2$CIN==x]))<2))
+
+#Re-order Wave 1 by CIN and a/b
+wave1<-wave1[order(wave1$CIN,wave1$abPartner),]
+# 
+# #Impute the sexes reported in Wave 1 into Wave 2
+# #Some people seem to have made an error in Wave 2 where they misidentified their sex relative to Wave 1
+# #This is just correcting this, assuming that Partner A is the same person both times
+# wave2$sex[wave2$CIN %in% wave2$CIN[w2nhet2==1]]<-wave1$sex[wave1$CIN %in% wave2$CIN[w2nhet2==1]]
+# 
+# #Re-identify putative same-sex couples in wave 2
+# w2nhet<-sapply(wave2$CIN,function(x) sum(duplicated(wave2$sex[wave2$CIN==x])))>0
+# 
+# #Remove those whose sexes are just NAs
+# w2nhet2<-w2nhet*(sapply(wave2$CIN,function(x) sum(is.na(wave2$sex[wave2$CIN==x]))<2))
+
+#Separate out non-heterosexual and non-binary participants
+w2nhet<-wave2[w2nhet2==1,]
+w2nhet<-rbind(w2nhet,wave2[wave2$CIN %in% wave2$CIN[wave2$sex>1],])
+
+# #Do the reverse for Wave 2 to Wave 1 (i.e. correcting sexes that appeared to be misreported in Wave 1)
+# wave1$sex[wave1$CIN %in% w1nhet$CIN & wave1$CIN %in% wave2$CIN]<-ifelse(
+#   !is.na(wave2$sex[wave2$CIN %in% w1nhet$CIN]),
+#   wave2$sex[wave2$CIN %in% w1nhet$CIN],
+#   wave1$sex[wave1$CIN %in% w1nhet$CIN & wave1$CIN %in% wave2$CIN])
+
+#Re-remove non-heterosexual participants from wave 1 for these calculations
+# w1nhet<-wave1[sapply(wave1$CIN,function(x) sum(duplicated(wave1$sex[wave1$CIN==x])))>0,]
+# w1nhet<-rbind(w1nhet,wave1[wave1$CIN %in% wave1$CIN[wave1$sex>1],])
+
+#Verifying that people are accurately paired across W1 and W2
+
+#Determine for each participant whether they are more similar to Partner A or Partner B
+#from their couple in Wave 1
+#This will be TRUE if Partner A in Wave 2 is more similar to Partner A in Wave 1 and FALSE if vice versa
+#The same is true for Partner B
+mismatch<-sapply(1:nrow(wave2),function(x)
+  
+  dist(rbind(wave2[x,c(4,7,9:16,18:21)],
+             wave1[wave1$CIN==wave2$CIN[x] & wave1$abPartner==wave2$abPartner[x],c(4,7,9:16,18:21)]))<
+    dist(rbind(wave2[x,c(4,7,9:16,18:21)],
+               wave1[wave1$CIN==wave2$CIN[x] & wave1$abPartner!=wave2$abPartner[x],c(4,7,9:16,18:21)]))
+)
+
+#Just convert any NAs to true because these are people that answered nothing
+mismatch[is.na(mismatch)]<-T
+
+#Identify Wave 2 couples that have a mismatch
+w2mismatch<-wave2[wave2$CIN %in% wave2$CIN[mismatch==F],]
+
+#Create a matrix to compare people across Wave 1 and Wave 2 for potentially mismatched couples
+#It looks like Partner A and Partner B are the same person across waves
+mismatchComp<-cbind(w2mismatch[,c("sex","age","CIN","abPartner")],
+      wave1[wave1$CIN %in% w2mismatch$CIN,c("sex","age","CIN","abPartner")])
+
+
+wave1<-wave1[!(wave1$CIN %in% w1nhet$CIN),]
+wave2<-wave2[!(wave2$CIN %in% w2nhet$CIN),]
+
+#Ideal MV#
+
+#Split into male and female dataframes
+w1DataF<-subset(wave1,wave1$sex==0)
+w1DataM<-subset(wave1,wave1$sex==1)
+
+w2DataF<-subset(wave2,wave2$sex==0 & wave2$relstat2!=0)
+w2DataM<-subset(wave2,wave2$sex==1 & wave2$relstat2!=0)
+w2DataNA<-subset(wave2,wave2$relstat2==0)
+
+#Correct ideal age ratings (forgot to do this before)
+w1DataF$idealAge<-w1DataF$idealAge-1
+w1DataM$idealAge<-w1DataM$idealAge-1
+
+w2DataF$idealAge<-w2DataF$idealAge-1
+w2DataM$idealAge<-w2DataM$idealAge-1
+
+#Compute average male and female prefs
+w1FemalePrefs<-colMeans(w1DataF[,c(277:291,52)],na.rm=T)
+w1MalePrefs<-colMeans(w1DataM[,c(277:291,52)],na.rm=T)
+
+w2FemalePrefs<-colMeans(w2DataF[,c(277:291,52)],na.rm=T)
+w2MalePrefs<-colMeans(w2DataM[,c(277:291,52)],na.rm=T)
+
+#Calculate ideal mate value
+w1DataF$idealmv<-apply(w1DataF,1,function(x) eucmvcalc(w1FemalePrefs,x[c(277:291,52)]))
+w1DataM$idealmv<-apply(w1DataM,1,function(x) eucmvcalc(w1MalePrefs,x[c(277:291,52)]))
+
+w2DataF$idealmv<-apply(w2DataF,1,function(x) eucmvcalc(w2FemalePrefs,x[c(277:291,52)]))
+w2DataM$idealmv<-apply(w2DataM,1,function(x) eucmvcalc(w2MalePrefs,x[c(277:291,52)]))
+
+
+#Self MV#
+#Calculate selfmv
+
+w1DataF$selfmvSR<-apply(w1DataF,1,function(x) eucmvcalc(w1MalePrefs,x[c(292:306,398)]))
+w1DataM$selfmvSR<-apply(w1DataM,1,function(x) eucmvcalc(w1FemalePrefs,x[c(292:306,398)]))
+
+w1DataF$selfmvMR<-apply(w1DataF,1,function(x) eucmvcalc(w1MalePrefs,x[c(352:366,398)]))
+w1DataM$selfmvMR<-apply(w1DataM,1,function(x) eucmvcalc(w1FemalePrefs,x[c(352:366,398)]))
+
+w1DataF$selfmvComp<-apply(w1DataF,1,function(x) eucmvcalc(w1MalePrefs,x[c(368:382,398)]))
+w1DataM$selfmvComp<-apply(w1DataM,1,function(x) eucmvcalc(w1FemalePrefs,x[c(368:382,398)]))
+
+
+w2DataF$selfmvSR<-apply(w2DataF,1,function(x) eucmvcalc(w2MalePrefs,x[c(292:306,398)]))
+w2DataM$selfmvSR<-apply(w2DataM,1,function(x) eucmvcalc(w2FemalePrefs,x[c(292:306,398)]))
+
+w2DataF$selfmvMR<-apply(w2DataF,1,function(x) eucmvcalc(w2MalePrefs,x[c(352:366,398)]))
+w2DataM$selfmvMR<-apply(w2DataM,1,function(x) eucmvcalc(w2FemalePrefs,x[c(352:366,398)]))
+
+w2DataF$selfmvComp<-apply(w2DataF,1,function(x) eucmvcalc(w2MalePrefs,x[c(368:382,398)]))
+w2DataM$selfmvComp<-apply(w2DataM,1,function(x) eucmvcalc(w2FemalePrefs,x[c(368:382,398)]))
+
+
+#Calculate mate preference fulfillment
+w1DataF$prefmatchSR<-apply(w1DataF,1,function(x) eucmvcalc(x[c(277:291,52)],x[c(307:321,367)]))
+w1DataM$prefmatchSR<-apply(w1DataM,1,function(x) eucmvcalc(x[c(277:291,52)],x[c(307:321,367)]))
+
+w1DataF$prefmatchMR<-apply(w1DataF,1,function(x) eucmvcalc(x[c(277:291,52)],x[c(337:351,367)]))
+w1DataM$prefmatchMR<-apply(w1DataM,1,function(x) eucmvcalc(x[c(277:291,52)],x[c(337:351,367)]))
+
+w1DataF$prefmatchComp<-apply(w1DataF,1,function(x) eucmvcalc(x[c(277:291,52)],x[c(383:397,367)]))
+w1DataM$prefmatchComp<-apply(w1DataM,1,function(x) eucmvcalc(x[c(277:291,52)],x[c(383:397,367)]))
+
+
+w2DataF$prefmatchSR<-apply(w2DataF,1,function(x) eucmvcalc(x[c(277:291,52)],x[c(307:321,367)]))
+w2DataM$prefmatchSR<-apply(w2DataM,1,function(x) eucmvcalc(x[c(277:291,52)],x[c(307:321,367)]))
+
+w2DataF$prefmatchMR<-apply(w2DataF,1,function(x) eucmvcalc(x[c(277:291,52)],x[c(337:351,367)]))
+w2DataM$prefmatchMR<-apply(w2DataM,1,function(x) eucmvcalc(x[c(277:291,52)],x[c(337:351,367)]))
+
+w2DataF$prefmatchComp<-apply(w2DataF,1,function(x) eucmvcalc(x[c(277:291,52)],x[c(383:397,367)]))
+w2DataM$prefmatchComp<-apply(w2DataM,1,function(x) eucmvcalc(x[c(277:291,52)],x[c(383:397,367)]))
+
+
+#Compute MVDPPs
+
+#W1 Males
+for(i in 1:nrow(w1DataM)){
+  
+  #Compute match between the participant's preferences and all partners based on self report
+  altMatchSR<-apply(w1DataM[,c(307:321,367)],1,function(x)
+    eucmvcalc(w1DataM[i,c(277:291,52)],x)
+    )
+  
+  #Compute match between the participant's preferences and all partners based on self report
+  altMatchMR<-apply(w1DataM[,c(337:351,367)],1,function(x)
+    eucmvcalc(w1DataM[i,c(277:291,52)],x)
+  )
+  
+  #Compute match between the participant's preferences and all partners based on self report
+  altMatchComp<-apply(w1DataM[,c(383:397,367)],1,function(x)
+    eucmvcalc(w1DataM[i,c(277:291,52)],x)
+  )
+  
+  #Compute and store MVDPPs
+  w1DataM$mvdppSR[i]<-mean(w1DataM$prefmatchSR[i]>altMatchSR,na.rm=T)
+  w1DataM$mvdppMR[i]<-mean(w1DataM$prefmatchMR[i]>altMatchMR,na.rm=T)
+  w1DataM$mvdppComp[i]<-mean(w1DataM$prefmatchComp[i]>altMatchComp,na.rm=T)
+  
+}
+
+
+
+#W1 Females
+for(i in 1:nrow(w1DataF)){
+  
+  #Compute match between the participant's preferences and all partners based on self report
+  altMatchSR<-apply(w1DataF[,c(307:321,367)],1,function(x)
+    eucmvcalc(w1DataF[i,c(277:291,52)],x)
+  )
+  
+  #Compute match between the participant's preferences and all partners based on self report
+  altMatchMR<-apply(w1DataF[,c(337:351,367)],1,function(x)
+    eucmvcalc(w1DataF[i,c(277:291,52)],x)
+  )
+  
+  #Compute match between the participant's preferences and all partners based on self report
+  altMatchComp<-apply(w1DataF[,c(383:397,367)],1,function(x)
+    eucmvcalc(w1DataF[i,c(277:291,52)],x)
+  )
+  
+  #Compute and store MVDPPs
+  w1DataF$mvdppSR[i]<-mean(w1DataF$prefmatchSR[i]>altMatchSR,na.rm=T)
+  w1DataF$mvdppMR[i]<-mean(w1DataF$prefmatchMR[i]>altMatchMR,na.rm=T)
+  w1DataF$mvdppComp[i]<-mean(w1DataF$prefmatchComp[i]>altMatchComp,na.rm=T)
+  
+}
+
+
+
+#W2 Males
+for(i in 1:nrow(w2DataM)){
+  
+  #Compute match between the participant's preferences and all partners based on self report
+  altMatchSR<-apply(w2DataM[,c(307:321,367)],1,function(x)
+    eucmvcalc(w2DataM[i,c(277:291,52)],x)
+  )
+  
+  #Compute match between the participant's preferences and all partners based on self report
+  altMatchMR<-apply(w2DataM[,c(337:351,367)],1,function(x)
+    eucmvcalc(w2DataM[i,c(277:291,52)],x)
+  )
+  
+  #Compute match between the participant's preferences and all partners based on self report
+  altMatchComp<-apply(w2DataM[,c(383:397,367)],1,function(x)
+    eucmvcalc(w2DataM[i,c(277:291,52)],x)
+  )
+  
+  #Compute and store MVDPPs
+  w2DataM$mvdppSR[i]<-mean(w2DataM$prefmatchSR[i]>altMatchSR,na.rm=T)
+  w2DataM$mvdppMR[i]<-mean(w2DataM$prefmatchMR[i]>altMatchMR,na.rm=T)
+  w2DataM$mvdppComp[i]<-mean(w2DataM$prefmatchComp[i]>altMatchComp,na.rm=T)
+  
+}
+
+
+
+#W2 Females
+for(i in 1:nrow(w2DataF)){
+  
+  #Compute match between the participant's preferences and all partners based on self report
+  altMatchSR<-apply(w2DataF[,c(307:321,367)],1,function(x)
+    eucmvcalc(w2DataF[i,c(277:291,52)],x)
+  )
+  
+  #Compute match between the participant's preferences and all partners based on self report
+  altMatchMR<-apply(w2DataF[,c(337:351,367)],1,function(x)
+    eucmvcalc(w2DataF[i,c(277:291,52)],x)
+  )
+  
+  #Compute match between the participant's preferences and all partners based on self report
+  altMatchComp<-apply(w2DataF[,c(383:397,367)],1,function(x)
+    eucmvcalc(w2DataF[i,c(277:291,52)],x)
+  )
+  
+  #Compute and store MVDPPs
+  w2DataF$mvdppSR[i]<-mean(w2DataF$prefmatchSR[i]>altMatchSR,na.rm=T)
+  w2DataF$mvdppMR[i]<-mean(w2DataF$prefmatchMR[i]>altMatchMR,na.rm=T)
+  w2DataF$mvdppComp[i]<-mean(w2DataF$prefmatchComp[i]>altMatchComp,na.rm=T)
+  
+}
+
+
+#Compute mate MVs
+w1DataM$matemvSR<-apply(w1DataM,1,function(x) eucmvcalc(w1MalePrefs,x[c(307:321,367)]))
+w1DataF$matemvSR<-apply(w1DataF,1,function(x) eucmvcalc(w1FemalePrefs,x[c(307:321,367)]))
+
+w1DataM$matemvMR<-apply(w1DataM,1,function(x) eucmvcalc(w1MalePrefs,x[c(337:351,367)]))
+w1DataF$matemvMR<-apply(w1DataF,1,function(x) eucmvcalc(w1FemalePrefs,x[c(337:351,367)]))
+
+w1DataM$matemvComp<-apply(w1DataM,1,function(x) eucmvcalc(w1MalePrefs,x[c(383:397,367)]))
+w1DataF$matemvComp<-apply(w1DataF,1,function(x) eucmvcalc(w1FemalePrefs,x[c(383:397,367)]))
+
+
+w2DataM$matemvSR<-apply(w2DataM,1,function(x) eucmvcalc(w2MalePrefs,x[c(307:321,367)]))
+w2DataF$matemvSR<-apply(w2DataF,1,function(x) eucmvcalc(w2FemalePrefs,x[c(307:321,367)]))
+
+w2DataM$matemvMR<-apply(w2DataM,1,function(x) eucmvcalc(w2MalePrefs,x[c(337:351,367)]))
+w2DataF$matemvMR<-apply(w2DataF,1,function(x) eucmvcalc(w2FemalePrefs,x[c(337:351,367)]))
+
+w2DataM$matemvComp<-apply(w2DataM,1,function(x) eucmvcalc(w2MalePrefs,x[c(383:397,367)]))
+w2DataF$matemvComp<-apply(w2DataF,1,function(x) eucmvcalc(w2FemalePrefs,x[c(383:397,367)]))
+
+
+#Compute MVDPS
+w1DataM$mvdpsSR<-w1DataM$matemvSR-w1DataM$selfmvSR
+w1DataM$mvdpsMR<-w1DataM$matemvMR-w1DataM$selfmvMR
+w1DataM$mvdpsComp<-w1DataM$matemvComp-w1DataM$selfmvComp
+
+w1DataF$mvdpsSR<-w1DataF$matemvSR-w1DataF$selfmvSR
+w1DataF$mvdpsMR<-w1DataF$matemvMR-w1DataF$selfmvMR
+w1DataF$mvdpsComp<-w1DataF$matemvComp-w1DataF$selfmvComp
+
+
+w2DataM$mvdpsSR<-w2DataM$matemvSR-w2DataM$selfmvSR
+w2DataM$mvdpsMR<-w2DataM$matemvMR-w2DataM$selfmvMR
+w2DataM$mvdpsComp<-w2DataM$matemvComp-w2DataM$selfmvComp
+
+w2DataF$mvdpsSR<-w2DataF$matemvSR-w2DataF$selfmvSR
+w2DataF$mvdpsMR<-w2DataF$matemvMR-w2DataF$selfmvMR
+w2DataF$mvdpsComp<-w2DataF$matemvComp-w2DataF$selfmvComp
+
+
+#Compute all MV variables for prior partners
+#Note we didn't ask about age of prior partners
+w2DataM$prefmatchPrior<-apply(w2DataM,1,function(x) eucmvcalc(x[c(277:291)],x[c(322:336)]))
+w2DataM$matemvPrior<-apply(w2DataM,1,function(x) eucmvcalc(w2MalePrefs[-16],x[c(322:336)]))
+w2DataM$mvdpsPrior<-w2DataM$matemvPrior-w2DataM$selfmvSR
+
+
+w2DataF$prefmatchPrior<-apply(w2DataF,1,function(x) eucmvcalc(x[c(277:291)],x[c(322:336)]))
+w2DataF$matemvPrior<-apply(w2DataF,1,function(x) eucmvcalc(w2FemalePrefs[-16],x[c(322:336)]))
+w2DataF$mvdpsPrior<-w2DataF$matemvPrior-w2DataF$selfmvSR
+
+#Put the wave1 data back together
+wave1<-rbind(w1DataF,w1DataM)
+wave2<-rbind(w2DataF,w2DataM,w2DataNA)
+
+#Rearrange again
+wave1<-wave1[order(wave1$CIN,wave1$sex,wave1$abPartner),]
+wave2<-wave2[order(wave2$CIN,wave2$sex,wave2$abPartner),]
+
+#Create variables to track what wave each observation came from
+wave1$wave<-1
+wave2$wave<-2
+
+#Put the waves together
+data<-rbind(wave1,wave2)
+
+#Convert NaN MVDPPs to NAs
+data$mvdppSR[is.nan(data$mvdppSR)]<-NA
+data$mvdppMR[is.nan(data$mvdppMR)]<-NA
+data$mvdppComp[is.nan(data$mvdppComp)]<-NA
+
+```
+
+
+
+```{r relationship quality}
+
+###QMI Satisfaction###
+
+##QMI Satisfaction##
+data$qmiHappy<-7*(data$qmiHappy/10)
+data$qmiSat<-rowMeans(data[,114:119],na.rm=T)/7
+
+
+###PRQC###
+##PRQC Relationship Quality Subscales##
+data$prqcSat<-rowMeans(data[,170:172],na.rm=T)/7
+data$prqcComm<-rowMeans(data[,173:175],na.rm=T)/7
+data$prqcInt<-rowMeans(data[,176:178],na.rm=T)/7
+data$prqcTrust<-rowMeans(data[,179:181],na.rm=T)/7
+data$prqcPass<-rowMeans(data[,182:184],na.rm=T)/7
+data$prqcLove<-rowMeans(data[,185:187],na.rm=T)/7
+
+###Overall Jealousy and Mate Guarding###
+data$jeal<-rowMeans(data[,120:124],na.rm=T)/7
+data$pGuard<-rowMeans(data[,127:131],na.rm=T)/7
+data$rGuard<-rowMeans(data[,132:136],na.rm=T)/7
+
+
+#Rearrange data one more time
+data<-data[,c(274,273,275:276,418,4:21,1:3,204:205,137:169,22:51,53:112,
+              292:306,352:366,307:321,337:351,277:291,52,368:382,398,383:397,367,399:413,417,188:203,
+              114:136,170:187,419:428,206:259,322:336,260:272,414:416)]
+
+```
+
+
+
+```{r save data}
+
+#Create a timestamp
+timestamp<-format(Sys.time(),"%Y%m%d %H%M")
+
+#Save file
+write.csv(data,paste0("Human Data/Processed Data/Love Longitudinal Study PROCESSED ",timestamp,".csv"),row.names=F)
+
+```

@@ -1,0 +1,341 @@
+---
+title: "Love Longitudinal Analyses"
+output:
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = FALSE,fig.width=11,fig.height=10)
+
+#Save figures?
+sf<-1
+
+```
+
+
+```{r packages, include=FALSE}
+
+library(ggplot2)
+library(lmerTest)
+library(data.table)
+
+```
+
+
+
+```{r load data}
+
+#Load the full data
+data<-read.csv("Human Data/Processed Data/Love Longitudinal Study PROCESSED 20230501 1233.csv")
+
+
+#Separate out wave 2
+wave2<-subset(data,data$wave==2)
+
+#Separate out wave 1
+wave1<-subset(data,data$wave==1)
+
+#Retain only people who completed both waves
+wave1<-wave1[wave1$PIN %in% wave2$PIN,]
+
+```
+
+
+
+```{r processing}
+
+#Compute a composite of the two satisfaction variables
+wave1$satComp<-rowMeans(wave1[,c("qmiSat","prqcSat")],na.rm=T)
+wave2$satComp<-rowMeans(wave2[,c("qmiSat","prqcSat")],na.rm=T)
+
+
+#Transfer wave 1 variables to wave 2
+wave2$w1Sat<-wave1$satComp[match(wave2$PIN,wave1$PIN)]
+wave2$w1Comm<-wave1$prqcComm[match(wave2$PIN,wave1$PIN)]
+wave2$w1Love<-wave1$prqcLove[match(wave2$PIN,wave1$PIN)]
+
+wave2$w1MvdppComp<-wave1$mvdppComp[match(wave2$PIN,wave1$PIN)]
+wave2$w1MvdppMR<-wave1$mvdppMR[match(wave2$PIN,wave1$PIN)]
+
+#Computing difference variables
+wave2$satDiff<-wave2$satComp-wave2$w1Sat
+wave2$commDiff<-wave2$prqcComm-wave2$w1Comm
+wave2$loveDiff<-wave2$prqcLove-wave2$w1Love
+
+wave2$mvdppDiffComp<-wave2$mvdppComp-wave2$w1MvdppComp
+wave2$mvdppDiffMR<-wave2$mvdppMR-wave2$w1MvdppMR
+
+```
+
+
+
+```{r models}
+
+#Change in love as a function of change in MVDPP (composite)
+lovereg1<-lmer(scale(prqcLove)~scale(w1Love)+scale(mvdppDiffComp)+(1|CIN),data=wave2)
+
+#Change in love as a function of change in MVDPP (mate rated)
+lovereg1MR<-lmer(scale(prqcLove)~scale(w1Love)+scale(mvdppDiffMR)+(1|CIN),data=wave2)
+
+#Change in love as a function of change in MVDPP, controlling for change in satisfaction
+lovereg2<-lmer(scale(prqcLove)~scale(w1Love)+scale(mvdppDiffComp)+scale(satDiff)+(1|CIN),data=wave2)
+
+#Change in love as a function of change in MVDPP, controlling for change in commitment
+lovereg3<-lmer(scale(prqcLove)~scale(w1Love)+scale(mvdppDiffComp)+scale(commDiff)+(1|CIN),data=wave2)
+
+#Create blank vectors to store bootstrapped slope estimates
+satSlopes<-rep(NA,10000)
+commSlopes<-rep(NA,10000)
+
+#Separate wave 2 data by sex
+w2f<-wave2[wave2$sex==0,]
+w2m<-wave2[wave2$sex==1,]
+
+#Loop 10k times
+for(i in 1:10000){
+  
+  #Bootstrap CINs
+  bootCIN<-sample(unique(wave2$CIN),
+                  length(unique(wave2$CIN)),
+                  replace=T)
+  
+  #Draw the associated rows
+  bootSamp<-rbind(w2f[match(bootCIN,w2f$CIN),],
+                  w2m[match(bootCIN,w2m$CIN),])
+
+  
+  #Re-label CINs
+  bootSamp$CIN<-rep(1:length(unique(wave2$CIN)),times=2)
+
+  #Fit models
+  bootreg1<-lmer(scale(prqcLove)~scale(w1Love)+scale(mvdppDiffComp)+scale(satDiff)+(1|CIN),data=bootSamp)
+  bootreg2<-lmer(scale(prqcLove)~scale(w1Love)+scale(mvdppDiffComp)+scale(commDiff)+(1|CIN),data=bootSamp)
+
+  #Save slopes
+  satSlopes[i]<-summary(bootreg1)$coefficients[3,1]
+  commSlopes[i]<-summary(bootreg2)$coefficients[3,1]
+  
+}
+
+#Save bootstrap CIs
+satCI<-quantile(satSlopes,c(.025,.975))
+commCI<-quantile(commSlopes,c(.025,.975))
+
+
+#Change in satisfaction as a function of MVDPP and wave 1 love
+satreg1<-lmer(scale(satComp)~scale(w1Sat)+scale(mvdppDiffComp)*scale(w1Love)+(1|CIN),data=wave2)
+satreg1MR<-lmer(scale(satComp)~scale(w1Sat)+scale(mvdppDiffMR)*scale(w1Love)+(1|CIN),data=wave2)
+
+#Change in satisfaction as a function of MVDPP and wave 1 love
+satreg2<-lmer(scale(satComp)~scale(w1Sat)+scale(mvdppDiffComp)*scale(prqcLove)+(1|CIN),data=wave2)
+satreg2MR<-lmer(scale(satComp)~scale(w1Sat)+scale(mvdppDiffMR)*scale(prqcLove)+(1|CIN),data=wave2)
+
+#Change in commitment as a function of MVDPP and wave 1 love
+commreg1<-lmer(scale(prqcComm)~scale(w1Comm)+scale(mvdppDiffComp)*scale(w1Love)+(1|CIN),data=wave2)
+commreg1MR<-lmer(scale(prqcComm)~scale(w1Comm)+scale(mvdppDiffMR)*scale(w1Love)+(1|CIN),data=wave2)
+
+#Change in commitment as a function of MVDPP and wave 1 love
+commreg2<-lmer(scale(prqcComm)~scale(w1Comm)+scale(mvdppDiffComp)*scale(prqcLove)+(1|CIN),data=wave2)
+commreg2MR<-lmer(scale(prqcComm)~scale(w1Comm)+scale(mvdppDiffMR)*scale(prqcLove)+(1|CIN),data=wave2)
+
+```
+
+
+
+```{r plots}
+
+#Change in love as a function of change in MVDPP
+loveDiffPlot<-qplot(mvdppDiffComp,loveDiff,
+                    data=wave2,
+                    xlab="MVDPP Difference (Wave 2 - Wave 1)",
+                    ylab="PRQC Love Difference (Wave 2 - Wave 1)")+
+  theme_classic(base_size=20)+
+  geom_smooth(method="lm",se=F)
+
+
+#Make median splits of the love variables for plotting
+wave2$w1LoveSplit<-ifelse(wave2$w1Love>median(wave2$w1Love,na.rm=T),
+                          "High","Low")
+wave2$w2LoveSplit<-ifelse(wave2$prqcLove>median(wave2$prqcLove,na.rm=T),
+                          "High","Low")
+
+#Change in satisfaction as a function of change in MVDPP, as moderated by W2 love
+satDiffPlot<-qplot(mvdppDiffComp,satDiff,color=w2LoveSplit,
+                   data=wave2[complete.cases(wave2$w2LoveSplit),],
+                    xlab="MVDPP Difference (Wave 2 - Wave 1)",
+                    ylab="Satisfaction Difference\n(Wave 2 - Wave 1)")+
+  theme_classic(base_size=20)+
+  geom_smooth(method="lm",se=F)+
+  scale_color_discrete(name="Wave 2 Love\n(Median Split)")
+
+
+
+#Change in satisfaction as a function of change in MVDPP, as moderated by W2 love
+commDiffPlot<-qplot(mvdppDiffComp,commDiff,color=w1LoveSplit,
+                   data=wave2[complete.cases(wave2$w1LoveSplit),],
+                    xlab="MVDPP Difference (Wave 2 - Wave 1)",
+                    ylab="PRQC Commitment Difference\n(Wave 2 - Wave 1)")+
+  theme_classic(base_size=20)+
+  geom_smooth(method="lm",se=F)+
+  scale_color_discrete(name="Wave 1 Love\n(Median Split)")
+
+
+#Create a recombined data set for plotting commitment separately at W1 and W2
+fullData<-rbind(wave1,wave2[,1:ncol(wave1)])
+
+#Import the love median split into this dataframe
+fullData$loveSplit<-ifelse(fullData$PIN %in% wave1$PIN[wave1$prqcLove>median(wave1$prqcLove,na.rm=T)],
+                           "High","Low")
+
+#Relabel the wave variable
+fullData$wave<-ifelse(fullData$wave==1,"Wave 1","Wave 2")
+
+#Plot MVDPP, commitment, and love separately across waves 1 and 2
+commPlot<-qplot(mvdppComp,
+      prqcComm,
+      color=loveSplit,
+      data=fullData,
+      xlab="MVDPP (Composite)",
+      ylab="PRQC Commitment")+
+  geom_smooth(method="lm",se=F)+
+  facet_wrap(~wave)+
+  scale_color_discrete(name="Wave 1 Love\n(Median Split)")+
+  theme_classic(base_size=20)
+
+if(sf==1){
+  
+  ggsave("Figures/Love Change Plot.tiff",loveDiffPlot,dpi=300,width=10,height=10,units="in")
+  ggsave("Figures/Satisfaction Change Plot.tiff",satDiffPlot,dpi=300,width=10,height=10,units="in")
+  ggsave("Figures/Commitment Change Plot.tiff",commDiffPlot,dpi=300,width=10,height=10,units="in")
+  ggsave("Figures/Longitudinal Commitment Plot.tiff",commPlot,dpi=300,width=10,height=10,units="in")
+
+  
+}
+
+```
+
+<br>
+<br>
+
+## Are changes in MVDPP associated with changes in love?
+
+**Yes**. Increases in MVDPP (composite) between waves 1 and 2 were associated with increases in love (PRQC), *b* = `r round(summary(lovereg1)$coefficients[3,1],3)`, *p* = `r ifelse(summary(lovereg1)$coefficients[3,5]<.001,"p<.001",round(summary(lovereg1)$coefficients[3,5],3))`
+
+```{r warning=FALSE, message=FALSE}
+summary(lovereg1)
+loveDiffPlot
+```
+<br>
+Figure 1. Change in love between waves 1 and 2 as a function of changes in MVDPP (composite).
+<br>
+<br>
+
+This is true even when using mate-rated MVDPP, *b* = `r round(summary(lovereg1MR)$coefficients[3,1],3)`, *p* = `r ifelse(summary(lovereg1MR)$coefficients[3,5]<.001,"p<.001",round(summary(lovereg1MR)$coefficients[3,5],3))`.
+
+```{r}
+summary(lovereg1MR)
+```
+
+<br>
+
+The relationship between change in MVDPP and change in love is lower when controlling for change in satisfaction, *b* = `r round(summary(lovereg2)$coefficients[3,1],3)`, 95% CI [`r as.numeric(round(satCI[1],3))`,`r as.numeric(round(satCI[2],3))`], *p* = `r ifelse(summary(lovereg2)$coefficients[3,5]<.001,"p<.001",round(summary(lovereg2)$coefficients[3,5],3))` suggesting changes in satisfaction partially mediates the relationship between changes in MVDPP and changes in love.
+
+<br>
+
+The relationship between change in MVDPP and change in love is no longer significant when controlling for change in commitment, *b* = `r round(summary(lovereg3)$coefficients[3,1],3)`, 95% CI [`r as.numeric(round(commCI[1],3))`,`r as.numeric(round(commCI[2],3))`], *p* = `r ifelse(summary(lovereg3)$coefficients[3,5]<.001,"p<.001",round(summary(lovereg3)$coefficients[3,5],3))`, suggesting changes in feelings of commitment fully mediate the relationship between changes in MVDPP and changes in love.
+
+<br>
+<br>
+
+## Does love moderate the relationship between change in MVDPP and satisfaction or commitment?
+
+Given that love change systematically with changes in MVDPP between waves, it's not clear whether wave 1 or wave 2 love should be expected to moderate MVDPP. It could be that wave 1 love has a protective effect, mitigating effects of subsequent changes in MVDPP. But it could also be that how much love one feels *now* (i.e. wave 2 love) is what protects feelings of satisfaction and commitment from recent changes in MVDPP. For this reason, I fit two separate models, each using either wave 1 or wave 2 love as a moderator of the relationship between MVDPP change and either love or satisfaction change.
+
+<br>
+
+### Satisfaction
+
+For satisfaction, Wave 1 love did not moderate the relationship between change in MVDPP (composite) and changes in feelings of satisfaction, *b* = `r round(summary(satreg1)$coefficients[5,1],3)`, *p* = `r ifelse(summary(satreg1)$coefficients[5,5]<.001,"p<.001",round(summary(satreg1)$coefficients[5,5],3))`
+
+```{r}
+summary(satreg1)
+```
+
+<br>
+
+Wave 2 love did moderate the relationship between change in MVDPP (composite) and changes in satisfaction, however in the *opposite* of the expected direction, *b* = `r round(summary(satreg2)$coefficients[5,1],3)`, *p* = `r ifelse(summary(satreg2)$coefficients[5,5]<.001,"p<.001",round(summary(satreg2)$coefficients[5,5],3))`. People more in love showed *higher* increases in satisfaction as a function of increases in MVDPP.
+
+```{r warning=FALSE, message=FALSE}
+summary(satreg2)
+satDiffPlot
+```
+
+<br>
+
+Figure 2. Changes in satisfaction as a function of changes in MVDP, moderated by feelings of love at Wave 2 ("High" means above median; "Low" means at or below median).
+
+<br>
+
+However, this moderation was not significant when using mate-rated MVDPP, *b* = `r round(summary(satreg1MR)$coefficients[5,1],3)`, *p* = `r ifelse(summary(satreg1MR)$coefficients[5,5]<.001,"p<.001",round(summary(satreg1MR)$coefficients[5,5],3))`.
+
+<br>
+
+### Commitment
+
+<br>
+
+For commitment, Wave 2 love did not moderate the relationship between change in MVDPP (composite) and changes in feelings of commitment, *b* = `r round(summary(commreg2)$coefficients[5,1],3)`, *p* = `r ifelse(summary(commreg2)$coefficients[5,5]<.001,"p<.001",round(summary(commreg2)$coefficients[5,5],3))`
+
+```{r}
+summary(commreg2)
+```
+
+<br>
+
+Wave 1 love *did* moderate the relationship between change in MVDPP (composite) and changes in commitment in the direction predicted by the commitment device hypothesis, *b* = `r round(summary(commreg1)$coefficients[5,1],3)`, *p* = `r ifelse(summary(commreg1)$coefficients[5,5]<.001,"p<.001",round(summary(commreg1)$coefficients[5,5],3))`. People more in love showed *less* change in commitment as a function of changes in MVDPP.
+
+```{r warning=FALSE, message=FALSE}
+summary(commreg1)
+commDiffPlot
+```
+
+<br>
+
+Figure 3.Changes in commitment as a function of changes in MVDP, moderated by feelings of love at Wave 1 ("High" means above median; "Low" means at or below median).
+
+<br>
+
+However, this was not significant when using mate-rated MVDPP, *b* = `r round(summary(commreg1MR)$coefficients[5,1],3)`, *p* = `r ifelse(summary(commreg1MR)$coefficients[5,5]<.001,"p<.001",round(summary(commreg1MR)$coefficients[5,5],3))`.
+
+Furthermore, given that love is correlated with both (1) feelings of commitment and (2) MVDPP---and changes in both of these variables---it is possible that this reflects a ceiling effect. Indeed, people who were high in love at Wave 1 tended to be high in MVDPP and commitment at both waves 1 and 2 and show less extreme changes in MVDPP across waves. The apparent moderation therefore might be just an artifact of a ceiling effect where in people who are high in love have less room to change in MVDPP or commitment.
+
+```{r warning=FALSE, message=FALSE}
+commPlot
+```
+
+<br>
+
+Figure 4. Commitment as a function of MVDPP and Love across Waves 1 and 2
+
+<br>
+
+```{r}
+
+tapply(wave2$w1MvdppComp,wave2$w1LoveSplit,summary)
+tapply(wave2$mvdppComp,wave2$w1LoveSplit,summary)
+
+tapply(wave2$mvdppDiffComp,wave2$w1LoveSplit,summary)
+
+tapply(wave2$w1Comm,wave2$w1LoveSplit,summary)
+tapply(wave2$prqcComm,wave2$w1LoveSplit,summary)
+
+```
+
+<br>
+
+### Summary
+
+Overall, we see that changes in MVDPP across time are *positively* associated with changes in love across time, such that people feel *less* in love when their partner when they have more quality alternatives. This is directly contrary to the hypothesis that love acts as a commitment device. These changes appear at least partially mediated by changes in satisfaction and commitment, consistent with the relationship maintenance hypothesis. However, caution in interpretation is still warranted as these data still do not allow teasing apart directions of causality.
+
+The commitment device hypothesis instead received only mixed support. Love did not appear to blunt the relationship between MVDPP and satisfaction---in fact, if anything, people in love were *more* sensitive to MVDPP in terms of their satisfaction. Love *did* appear to blunt the relationship between MVDPP and feelings of commitment, but only for wave 1 love and only for composite MVDPP. Even this effect seemed to be driven by a ceiling effect that is in fact consistent with the relationship maintenance hypothesis.
