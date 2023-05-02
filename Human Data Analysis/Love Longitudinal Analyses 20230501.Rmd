@@ -9,7 +9,7 @@ output:
 knitr::opts_chunk$set(echo = FALSE,fig.width=11,fig.height=10)
 
 #Save figures?
-sf<-1
+sf<-0
 
 ```
 
@@ -46,8 +46,8 @@ wave1<-wave1[wave1$PIN %in% wave2$PIN,]
 ```{r processing}
 
 #Compute a composite of the two satisfaction variables
-wave1$satComp<-rowMeans(wave1[,c("qmiSat","prqcSat")],na.rm=T)
-wave2$satComp<-rowMeans(wave2[,c("qmiSat","prqcSat")],na.rm=T)
+wave1$satComp<-rowMeans(wave1[,c("qmiSat","prqcSat")])
+wave2$satComp<-rowMeans(wave2[,c("qmiSat","prqcSat")])
 
 
 #Transfer wave 1 variables to wave 2
@@ -70,7 +70,7 @@ wave2$mvdppDiffMR<-wave2$mvdppMR-wave2$w1MvdppMR
 
 
 
-```{r models}
+```{r models, warning=FALSE, message=FALSE, cache=TRUE}
 
 #Change in love as a function of change in MVDPP (composite)
 lovereg1<-lmer(scale(prqcLove)~scale(w1Love)+scale(mvdppDiffComp)+(1|CIN),data=wave2)
@@ -85,8 +85,8 @@ lovereg2<-lmer(scale(prqcLove)~scale(w1Love)+scale(mvdppDiffComp)+scale(satDiff)
 lovereg3<-lmer(scale(prqcLove)~scale(w1Love)+scale(mvdppDiffComp)+scale(commDiff)+(1|CIN),data=wave2)
 
 #Create blank vectors to store bootstrapped slope estimates
-satSlopes<-rep(NA,10000)
-commSlopes<-rep(NA,10000)
+satSlopeDiffs<-rep(NA,10000)
+commSlopeDiffs<-rep(NA,10000)
 
 #Separate wave 2 data by sex
 w2f<-wave2[wave2$sex==0,]
@@ -96,31 +96,30 @@ w2m<-wave2[wave2$sex==1,]
 for(i in 1:10000){
   
   #Bootstrap CINs
-  bootCIN<-sample(unique(wave2$CIN),
-                  length(unique(wave2$CIN)),
+  bootCIN<-sample(unique(w2f$CIN),
+                  length(unique(w2f$CIN)),
                   replace=T)
   
   #Draw the associated rows
   bootSamp<-rbind(w2f[match(bootCIN,w2f$CIN),],
                   w2m[match(bootCIN,w2m$CIN),])
 
-  
-  #Re-label CINs
-  bootSamp$CIN<-rep(1:length(unique(wave2$CIN)),times=2)
-
   #Fit models
-  bootreg1<-lmer(scale(prqcLove)~scale(w1Love)+scale(mvdppDiffComp)+scale(satDiff)+(1|CIN),data=bootSamp)
-  bootreg2<-lmer(scale(prqcLove)~scale(w1Love)+scale(mvdppDiffComp)+scale(commDiff)+(1|CIN),data=bootSamp)
+  bootreg1<-lmer(scale(prqcLove)~scale(w1Love)+scale(mvdppDiffComp)+(1|CIN),data=bootSamp,REML=F)
+  bootreg2<-lmer(scale(prqcLove)~scale(w1Love)+scale(mvdppDiffComp)+scale(satDiff)+(1|CIN),data=bootSamp,REML=F)
+
+  bootreg3<-lmer(scale(prqcLove)~scale(w1Love)+scale(mvdppDiffComp)+(1|CIN),data=bootSamp,REML=F)
+  bootreg4<-lmer(scale(prqcLove)~scale(w1Love)+scale(mvdppDiffComp)+scale(commDiff)+(1|CIN),data=bootSamp,REML=F)
 
   #Save slopes
-  satSlopes[i]<-summary(bootreg1)$coefficients[3,1]
-  commSlopes[i]<-summary(bootreg2)$coefficients[3,1]
+  satSlopeDiffs[i]<-summary(bootreg1)$coefficients[3,1]-summary(bootreg2)$coefficients[3,1]
+  commSlopeDiffs[i]<-summary(bootreg3)$coefficients[3,1]-summary(bootreg4)$coefficients[3,1]
   
 }
 
 #Save bootstrap CIs
-satCI<-quantile(satSlopes,c(.025,.975))
-commCI<-quantile(commSlopes,c(.025,.975))
+satCI<-quantile(satSlopeDiffs,c(.025,.975))
+commCI<-quantile(commSlopeDiffs,c(.025,.975))
 
 
 #Change in satisfaction as a function of MVDPP and wave 1 love
@@ -143,7 +142,7 @@ commreg2MR<-lmer(scale(prqcComm)~scale(w1Comm)+scale(mvdppDiffMR)*scale(prqcLove
 
 
 
-```{r plots}
+```{r plots, warning=FALSE, message=FALSE}
 
 #Change in love as a function of change in MVDPP
 loveDiffPlot<-qplot(mvdppDiffComp,loveDiff,
@@ -239,18 +238,18 @@ summary(lovereg1MR)
 
 <br>
 
-The relationship between change in MVDPP and change in love is lower when controlling for change in satisfaction, *b* = `r round(summary(lovereg2)$coefficients[3,1],3)`, 95% CI [`r as.numeric(round(satCI[1],3))`,`r as.numeric(round(satCI[2],3))`], *p* = `r ifelse(summary(lovereg2)$coefficients[3,5]<.001,"p<.001",round(summary(lovereg2)$coefficients[3,5],3))` suggesting changes in satisfaction partially mediates the relationship between changes in MVDPP and changes in love.
+The relationship between change in MVDPP and change in love is lower when controlling for change in satisfaction, *b* = `r round(summary(lovereg2)$coefficients[3,1],3)`, *p* = `r ifelse(summary(lovereg2)$coefficients[3,5]<.001,"p<.001",round(summary(lovereg2)$coefficients[3,5],3))`. However, a bootstrap analysis indicates that this was not a significant decrease, *diff* = `r round(summary(lovereg1)$coefficients[3,1]-summary(lovereg2)$coefficients[3,1],3)`, 95% CI [`r as.numeric(round(satCI[1],3))`,`r as.numeric(round(satCI[2],3))`], meaning we do not have significant evidence of mediation of the relationship between MVDPP and love by satisfaction.
 
 <br>
 
-The relationship between change in MVDPP and change in love is no longer significant when controlling for change in commitment, *b* = `r round(summary(lovereg3)$coefficients[3,1],3)`, 95% CI [`r as.numeric(round(commCI[1],3))`,`r as.numeric(round(commCI[2],3))`], *p* = `r ifelse(summary(lovereg3)$coefficients[3,5]<.001,"p<.001",round(summary(lovereg3)$coefficients[3,5],3))`, suggesting changes in feelings of commitment fully mediate the relationship between changes in MVDPP and changes in love.
+The relationship between change in MVDPP and change in love is no longer significant when controlling for change in commitment, *b* = `r round(summary(lovereg3)$coefficients[3,1],3)`, *p* = `r ifelse(summary(lovereg3)$coefficients[3,5]<.001,"p<.001",round(summary(lovereg3)$coefficients[3,5],3))`. However, a bootstrap analysis indicates that this was not a significant decrease, *diff* = `r round(summary(lovereg1)$coefficients[3,1]-summary(lovereg3)$coefficients[3,1],3)`, 95% CI [`r as.numeric(round(commCI[1],3))`,`r as.numeric(round(commCI[2],3))`], meaning we do not have significant evidence of mediation of the relationship between MVDPP and love by commitment.
 
 <br>
 <br>
 
 ## Does love moderate the relationship between change in MVDPP and satisfaction or commitment?
 
-Given that love change systematically with changes in MVDPP between waves, it's not clear whether wave 1 or wave 2 love should be expected to moderate MVDPP. It could be that wave 1 love has a protective effect, mitigating effects of subsequent changes in MVDPP. But it could also be that how much love one feels *now* (i.e. wave 2 love) is what protects feelings of satisfaction and commitment from recent changes in MVDPP. For this reason, I fit two separate models, each using either wave 1 or wave 2 love as a moderator of the relationship between MVDPP change and either love or satisfaction change.
+Given that love changes systematically with changes in MVDPP between waves, it's not clear whether wave 1 or wave 2 love should be expected to moderate MVDPP. It could be that wave 1 love has a protective effect, mitigating effects of subsequent changes in MVDPP. But it could also be that how much love one feels *now* (i.e. wave 2 love) is what protects feelings of satisfaction and commitment from recent changes in MVDPP. For this reason, I fit two separate models, each using either wave 1 or wave 2 love as a moderator of the relationship between MVDPP change and either love or satisfaction change.
 
 <br>
 
@@ -336,6 +335,9 @@ tapply(wave2$prqcComm,wave2$w1LoveSplit,summary)
 
 ### Summary
 
-Overall, we see that changes in MVDPP across time are *positively* associated with changes in love across time, such that people feel *less* in love when their partner when they have more quality alternatives. This is directly contrary to the hypothesis that love acts as a commitment device. These changes appear at least partially mediated by changes in satisfaction and commitment, consistent with the relationship maintenance hypothesis. However, caution in interpretation is still warranted as these data still do not allow teasing apart directions of causality.
+Overall, we see that changes in MVDPP across time are *positively* associated with changes in love across time, such that people feel *less* in love when their partner when they have more quality alternatives. This is directly contrary to the hypothesis that love acts as a commitment device. However, we did not find significant evidence of mediation of the relationship between MVDPP and love by satisfaction for commitment. Furthermore, caution in interpretation is still warranted as these data still do not allow teasing apart direction of causality.
 
 The commitment device hypothesis instead received only mixed support. Love did not appear to blunt the relationship between MVDPP and satisfaction---in fact, if anything, people in love were *more* sensitive to MVDPP in terms of their satisfaction. Love *did* appear to blunt the relationship between MVDPP and feelings of commitment, but only for wave 1 love and only for composite MVDPP. Even this effect seemed to be driven by a ceiling effect that is in fact consistent with the relationship maintenance hypothesis.
+
+<br>
+<br>
